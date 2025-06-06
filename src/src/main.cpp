@@ -75,8 +75,6 @@ void trigger_init(struct Trigger *trig)
 int trigger_check(struct Trigger *trig)
 {
     uint8_t state = digitalRead(trig->pin);
-
-    // only trigger when previous state was not pressed
     
     // Turn off led if timer is done
     if (trig->t_ms && (millis() - trig->t_ms) > trig->t_timeout_ms) {
@@ -91,7 +89,7 @@ int trigger_check(struct Trigger *trig)
     else if (state != STATE_TRIGGERED && trig->prev_state) {
         trig->prev_state = 0;
     }
-    // A brand new button press
+    // Oh boy, a brand new button press
     else if (state == STATE_TRIGGERED) {
 
         // Triggers reset timeout so when a group of people walks in, the timer will be counting starting
@@ -100,7 +98,6 @@ int trigger_check(struct Trigger *trig)
         if (trig->t_ms < 0 || (millis() - trig->t_ms) > trig->t_timeout_ms) {
             trig->prev_state = 1;
             trig->t_ms = millis();
-            //digitalWrite(trigger.led->pin, HIGH);
             trig->led->blink_enabled = 1;
             printf("Setting timer for %d ms\n", trig->t_timeout_ms);
             return 1;
@@ -108,7 +105,7 @@ int trigger_check(struct Trigger *trig)
         else {
             printf("Ignoring input, reset timeout: %ld\n", (trig->t_ms) ? (millis() - trig->t_ms) : -1);
             trig->t_ms = millis();
-            delay(500);
+            delay(100);
         }
     }
     return 0;
@@ -162,6 +159,7 @@ uint32_t eeprom_write(uint32_t addr, uint8_t *buf, size_t size)
 
 void osc_recv_handler(OSCMessage &msg)
 {
+    /* Handle /trigger/timeout */
     if (msg.isInt(0)){
         uint32_t data = msg.getInt(0);
         printf("Reiceived new timeout over OSC, writing to EEPROM: %d\n", data);
@@ -199,6 +197,7 @@ void setup()
     if (!EEPROM.begin(sizeof(trigger.t_timeout_ms))) {
         printf("failed to initialize EEPROM\n");
         delay(1000);
+        while (1);
     }
 
     if (Ethernet.hardwareStatus() == EthernetNoHardware) {
