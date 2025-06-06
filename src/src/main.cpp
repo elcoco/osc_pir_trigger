@@ -92,8 +92,6 @@ int trigger_check(struct Trigger *trig)
     // Oh boy, a brand new button press
     else if (state == STATE_TRIGGERED) {
 
-        // Triggers reset timeout so when a group of people walks in, the timer will be counting starting
-        // from the last person walking in.
 
         if (trig->t_ms < 0 || (millis() - trig->t_ms) > trig->t_timeout_ms) {
             trig->prev_state = 1;
@@ -104,6 +102,10 @@ int trigger_check(struct Trigger *trig)
         }
         else {
             printf("Ignoring input, reset timeout: %ld\n", (trig->t_ms) ? (millis() - trig->t_ms) : -1);
+
+            // Timeout is reset everytime there is a trigger within the timeout.
+            // This ensures that when a group of people walks in, the timer will start counting from the last person walking in.
+            // To disable this bevavior, uncomment next line
             trig->t_ms = millis();
             delay(100);
         }
