@@ -15,10 +15,10 @@
 #define TARGET_PORT 53000
 #define MAC_ADDR 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED
 
-#define PIN_TRIGGER 2
-#define PIN_LED     3
+#define PIN_TRIGGER 0
+#define PIN_LED     1
 
-#define T_TIMEOUT_MS 10 * 1000
+#define TIMEOUT_DEFAULT 10 * 1000
 
 
 struct Led {
@@ -38,6 +38,7 @@ struct Trigger {
     struct Led *led;
     struct Msg *msg;
     int32_t t_ms;        // Keep track of time inbetween triggers
+    uint32_t t_timeout_ms;   // The time between triggers
 };
 
 struct Msg msg_go {
@@ -51,11 +52,14 @@ const IPAddress local_ip(LOCAL_IP);
 const int local_port = LOCAL_PORT;
 byte mac[6] = {MAC_ADDR};
 
-struct Led led_trigger = { .pin = PIN_TRIGGER };
+struct Led led_trigger = { .pin = PIN_LED,
+                           .blink_enabled = 0 };
 
-struct Trigger trigger = { .pin  = 0,
+struct Trigger trigger = { .pin  = PIN_TRIGGER,
+                          .prev_state = 0,
                           .led  = &led_trigger,
-                          .msg = &msg_go
-                        };
+                          .msg = &msg_go,
+                          .t_ms = -1,
+                          .t_timeout_ms = TIMEOUT_DEFAULT };
 
 #endif // !CONFIG_H

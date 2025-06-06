@@ -4,6 +4,8 @@
 #include <Ethernet.h>
 #include <EthernetUdp.h>
 #include <OSCMessage.h>
+#include <OSCBundle.h>
+#include <OSCBoards.h>
 #include <EEPROM.h>
 
 #include "esp32-hal-gpio.h"
@@ -53,20 +55,12 @@ void wait_for_link()
     uint8_t was_connected = 1;
 
     while (Ethernet.linkStatus() == LinkOFF) {
-
-        // Use ISR to blink leds
-        trigger.led->blink_enabled = 1;
-
         printf("Waiting for link\n");
         delay(500);
         was_connected = 0;
     }
     if (!was_connected)
         printf("Link is UP\n");
-
-    // End in LED off state
-    trigger.led->blink_enabled = 1;
-    digitalWrite(trigger.led->pin, LOW);
 }
 
 void trigger_init(struct Trigger *trig)
@@ -76,8 +70,6 @@ void trigger_init(struct Trigger *trig)
 
     pinMode(trig->led->pin, OUTPUT);
     trig->led->blink_enabled = 0;
-
-    trig->t_ms = -1;
 }
 
 int trigger_check(struct Trigger *trig)
@@ -85,6 +77,12 @@ int trigger_check(struct Trigger *trig)
     uint8_t state = digitalRead(trig->pin);
 
     // only trigger when previous state was not pressed
+    
+    // Turn off led if timer is done
+    if (trig->t_ms && (millis() - trig->t_ms) > trig->t_timeout_ms) {
+        trig->led->blink_enabled = 0;
+        digitalWrite(trigger.led->pin, LOW);
+    }
     
     // Ignore repeated triggers
     if (state == STATE_TRIGGERED && trig->prev_state)
@@ -99,15 +97,18 @@ int trigger_check(struct Trigger *trig)
         // Triggers reset timeout so when a group of people walks in, the timer will be counting starting
         // from the last person walking in.
 
-        if (trig->t_ms < 0 || (millis() - trig->t_ms) > T_TIMEOUT_MS) {
+        if (trig->t_ms < 0 || (millis() - trig->t_ms) > trig->t_timeout_ms) {
             trig->prev_state = 1;
             trig->t_ms = millis();
+            //digitalWrite(trigger.led->pin, HIGH);
+            trig->led->blink_enabled = 1;
+            printf("Setting timer for %d ms\n", trig->t_timeout_ms);
             return 1;
         }
         else {
             printf("Ignoring input, reset timeout: %ld\n", (trig->t_ms) ? (millis() - trig->t_ms) : -1);
             trig->t_ms = millis();
-            delay(100);
+            delay(500);
         }
     }
     return 0;
@@ -117,9 +118,9 @@ void led_blink(struct Led *led, uint8_t n)
 {
     for (uint8_t i=0 ; i<n ; i++) {
         digitalWrite(led->pin, 1);
-        delay(10);
+        delay(50);
         digitalWrite(led->pin, 0);
-        delay(BLINK_DUTYCYCLE_MS);
+        delay(50);
     }
 }
 
@@ -129,7 +130,6 @@ void osc_send_msg(struct Trigger *trig)
     Msg *msg = trig->msg;
     printf("Send: %s:%d%s\n", msg->ip.toString().c_str(), msg->port, msg->addr);
     OSCMessage osc_msg(msg->addr);
-    //osc_msg.add(msg);
     Udp.beginPacket(msg->ip, msg->port);
     osc_msg.send(Udp); // send the bytes to the SLIP stream
     Udp.endPacket(); // mark the end of the OSC Packet
@@ -143,9 +143,52 @@ void trigger_debug(struct Trigger *trig)
     printf("MSG %s:%d%s\n", trig->msg->ip.toString().c_str(), trig->msg->port, trig->msg->addr);
 }
 
+uint32_t eeprom_read(uint32_t addr, uint8_t *buf, size_t size)
+{
+    uint8_t *bufp = buf;
+    for (int i=0; i<size; i++, bufp++)
+        *bufp = byte(EEPROM.read(addr+i));
+    return 1;
+}
+
+uint32_t eeprom_write(uint32_t addr, uint8_t *buf, size_t size)
+{
+    uint8_t *bufp = buf;
+    for (int i=0; i<size; i++, bufp++)
+        EEPROM.write(addr+i, *bufp);
+    EEPROM.commit();
+    return 1;
+}
+
+void osc_recv_handler(OSCMessage &msg)
+{
+    if (msg.isInt(0)){
+        uint32_t data = msg.getInt(0);
+        printf("Reiceived new timeout over OSC, writing to EEPROM: %d\n", data);
+        eeprom_write(0x00, (uint8_t*)&data, sizeof(data));
+        trigger.t_timeout_ms = data;
+        led_blink(trigger.led, 10);
+    }
+    else {
+        printf("Received new timeout over OSC, wrong data type\n");
+    }
+}
+
+void osc_get_msg()
+{
+    int size;
+ 
+    if((size = Udp.parsePacket()) > 0) {
+        OSCMessage msg;
+        while(size--)
+            msg.fill(Udp.read());
+        if (!msg.dispatch("/trigger/timeout", osc_recv_handler))
+            printf("Received unhandled message\n");
+    }
+}
+
 void setup() 
 {
-
     SPI.begin(ETH_CLK, ETH_MISO, ETH_MOSI);
     delay(1000);
 
@@ -153,11 +196,10 @@ void setup()
     Ethernet.begin(mac, local_ip);
     Udp.begin(local_port);
 
-    if (!EEPROM.begin(EEPROM_SIZE)) {
+    if (!EEPROM.begin(sizeof(trigger.t_timeout_ms))) {
         printf("failed to initialize EEPROM\n");
         delay(1000);
     }
-
 
     if (Ethernet.hardwareStatus() == EthernetNoHardware) {
         printf("ERROR: No Ethernet hardware detected!\n");
@@ -174,17 +216,24 @@ void setup()
     timerAlarmWrite(timeout, BLINK_DUTYCYCLE_MS * 1000, true);
     timerAlarmEnable(timeout);
 
+    uint32_t t_timeout_ms = 0;
+    eeprom_read(0x00, (uint8_t*)&t_timeout_ms, sizeof(t_timeout_ms));
+    if (t_timeout_ms == 0xFFFFFFFF) {
+        printf("No timeout in eeprom, writing default: %d\n", TIMEOUT_DEFAULT);
+        uint32_t t_default = TIMEOUT_DEFAULT;
+        eeprom_write(0x00, (uint8_t*)&t_default, sizeof(t_default));
+    }
+    printf("Got timeout from EEPROM: %d\n", t_timeout_ms);
+    trigger.t_timeout_ms = t_timeout_ms;
 }
 
 void loop() 
 {
     wait_for_link();
-    if (trigger_check(&trigger)) {
+    if (trigger_check(&trigger))
         osc_send_msg(&trigger);
-        //led_blink(trigger.led, 1);
-        //delay(T_TIMEOUT_MS);
-        //printf("end timeout\n");
-    }
-    delay(.1);
+
+    osc_get_msg();
+    delay(100);
 
 }

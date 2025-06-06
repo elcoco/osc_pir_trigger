@@ -2,7 +2,8 @@
 
 ## Default esp settings
 
-    target ip: 10.0.0.255:53000
+    trigger ip: 10.0.0.100:8888
+    target ip:  10.0.0.255:53000
     osc message: /go
     
 
@@ -13,7 +14,7 @@ Inbetween triggers there is a minimum 3 second delay.
 This is a limitation from the PIR module.  
 
 Looking at the module, facing buttons, dome up:  
-- Left pot meter is sensitivity
-- Right pot meter is trigger delay. (All the way to the left is minimum 3 sec)
+- Right pot meter is sensitivity
+- Left pot meter is trigger delay. (All the way to the left is minimum 3 sec)
 
 
