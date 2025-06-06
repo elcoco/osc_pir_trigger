@@ -29,5 +29,10 @@ Looking at the module, facing buttons, dome up:
 
 https://github.com/72nd/osc-utility
 
-    # Use 'osc-utility' to listen for OSC messages
+    # Use 'osc-utility' to send/receive messages
+
+    # listen
     osc-utility server --port 53000 --host 0.0.0.0
+
+    # send timeout of 15000 ms
+    osc-utility msg --host 10.0.0.255 --port 8888 --address /trigger/timeout -i 15000
