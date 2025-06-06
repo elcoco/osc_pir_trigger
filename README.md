@@ -1,4 +1,4 @@
-# physical_matter_trigger
+# OSC PIR trigger
 
 ## Default esp settings
 
@@ -11,7 +11,6 @@
 
 Module reports high after a trigger for a duration of 1 second.  
 Inbetween triggers there is a minimum 3 second delay.   
-This is a limitation from the PIR module.  
 
 Looking at the module, facing buttons, dome up:  
 - Right pot meter is sensitivity
