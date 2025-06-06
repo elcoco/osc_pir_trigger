@@ -5,6 +5,7 @@
     trigger ip: 10.0.0.100:8888
     target ip:  10.0.0.255:53000
     osc message: /go
+    accepts integers (timeout) on: /trigger/timeout
     
 
 ## PIR module
