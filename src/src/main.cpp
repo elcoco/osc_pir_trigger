@@ -77,7 +77,7 @@ int trigger_check(struct Trigger *trig)
     uint8_t state = digitalRead(trig->pin);
     
     // Turn off led if timer is done
-    if (trig->t_ms && (millis() - trig->t_ms) > trig->t_timeout_ms) {
+    if (trig->t_ms_last && (millis() - trig->t_ms_last) > trig->t_timeout_ms) {
         trig->led->blink_enabled = 0;
         digitalWrite(trigger.led->pin, LOW);
     }
@@ -93,20 +93,20 @@ int trigger_check(struct Trigger *trig)
     else if (state == STATE_TRIGGERED) {
 
 
-        if (trig->t_ms < 0 || (millis() - trig->t_ms) > trig->t_timeout_ms) {
+        if (trig->t_ms_last < 0 || (millis() - trig->t_ms_last) > trig->t_timeout_ms) {
             trig->prev_state = 1;
-            trig->t_ms = millis();
+            trig->t_ms_last = millis();
             trig->led->blink_enabled = 1;
             printf("Setting timer for %d ms\n", trig->t_timeout_ms);
             return 1;
         }
         else {
-            printf("Ignoring input, reset timeout: %ld\n", (trig->t_ms) ? (millis() - trig->t_ms) : -1);
+            printf("Ignoring input, reset timeout: %ld\n", (trig->t_ms_last) ? (millis() - trig->t_ms_last) : -1);
 
             // Timeout is reset everytime there is a trigger within the timeout.
             // This ensures that when a group of people walks in, the timer will start counting from the last person walking in.
             // To disable this bevavior, uncomment next line
-            trig->t_ms = millis();
+            trig->t_ms_last = millis();
             delay(100);
         }
     }
@@ -182,7 +182,7 @@ void osc_get_msg()
         OSCMessage msg;
         while(size--)
             msg.fill(Udp.read());
-        if (!msg.dispatch("/trigger/timeout", osc_recv_handler))
+        if (!msg.dispatch(OSC_ADDR_TIMEOUT, osc_recv_handler))
             printf("Received unhandled message\n");
     }
 }
